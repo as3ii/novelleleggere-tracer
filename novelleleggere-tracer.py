@@ -60,7 +60,7 @@ def delete(toDelete):
 
 def run_query(name):
     url = "https://www.novelleleggere.com/category/" + name.replace(" ", "-").lower()
-    print("running query ", name, url)
+    print("running query - ", name, url)
     global queries
     # get page
     page = requests.get(url)
@@ -70,14 +70,8 @@ def run_query(name):
     chapter_list_items = chapter_list.find_all("h2")
 
     msg = []
-    
-    if len(chapter_list_items)>5:
-        list_len = 5
-    else:
-        list_len = len(chapter_list_items)
-
-    for index in range(0,list_len):
-        chapter = chapter_list_items[index]
+   
+    for chapter in chapter_list_items:
         item = chapter.find_all("a")
         title = item[0].contents[0]
         link = item[0].get("href")
@@ -89,13 +83,13 @@ def run_query(name):
             print("Adding result: ", title, " - ", date)
         else:   # add traced novel to dictionary
             if not queries.get(name).get(url).get(link):    #found a new element
-                tmp = "New element found for "+name+": "+title
+                tmp = "New element found for **"+name+"**: __"+title+"__"
                 msg.append(tmp)
                 date = time.strftime("%d/%m/%Y",time.localtime(time.time()))
                 queries[name][url][link] = {"title": title, "date": date}
     if len(msg) > 0:
-        telegram_send.send(messages=msg)
-        print("\n".join(msg))
+        telegram_send.send(messages=msg, parse_mode="markdown", timeout=60)
+        print("\n".join(msg).replace("**","").replace("__",""))
         save(dbFile)
     # print("queries file saved: ", queries)
 
