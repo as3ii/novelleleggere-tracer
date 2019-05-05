@@ -1,12 +1,12 @@
 #!/usr/bin/env python3.7
 
 import argparse
-import requests
-from bs4 import BeautifulSoup
 import json
 import os.path
-import telegram_send
 import time
+import telegram_send
+import requests
+from bs4 import BeautifulSoup
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--name", dest="name", metavar="\"novel name\"", help="name of the novel to trace")
@@ -54,8 +54,7 @@ def refresh():
 
 def delete(toDelete):
     global queries
-    queries.pop(toDelate)
-
+    queries.pop(toDelete)
 
 
 def run_query(name):
@@ -70,26 +69,30 @@ def run_query(name):
     chapter_list_items = chapter_list.find_all("h2")
 
     msg = []
-   
-    for chapter in chapter_list_items:
+
+    for chapter in reversed(chapter_list_items):
         item = chapter.find_all("a")
         title = item[0].contents[0]
         link = item[0].get("href")
-        
+
+        if title.lower().find("spoiler") == -1:
+            continue
+
         if not queries.get(name):   # insert the new traced novel
-            date = time.strftime("%d/%m/%Y",time.localtime(time.time()))
+            date = time.strftime("%d/%m/%Y", time.localtime(time.time()))
             queries[name] = {url: {link: {"title": title, "date": date}}}
             print("\nNew traced novel added: ", name)
             print("Adding result: ", title, " - ", date)
         else:   # add traced novel to dictionary
             if not queries.get(name).get(url).get(link):    #found a new element
-                tmp = "New element found for **"+name+"**: __"+title+"__"
+                tmp = "New element found for **"+name+"**: __"+title+"__\n"
+                tmp += "\n"+link
                 msg.append(tmp)
-                date = time.strftime("%d/%m/%Y",time.localtime(time.time()))
+                date = time.strftime("%d/%m/%Y", time.localtime(time.time()))
                 queries[name][url][link] = {"title": title, "date": date}
     if len(msg) > 0:
-        telegram_send.send(messages=msg, parse_mode="markdown", timeout=60)
-        print("\n".join(msg).replace("**","").replace("__",""))
+        telegram_send.send(messages=msg, parse_mode="markdown", disable_web_page_preview=True, timeout=60)
+        print("\n --- --- --- \n".join(msg).replace("**", "").replace("__", ""))
         save(dbFile)
     # print("queries file saved: ", queries)
 
@@ -102,7 +105,7 @@ def save(fileName):
 
 
 if __name__ == '__main__':
-    
+
     load_from_file(dbFile)
 
     if args.list:
