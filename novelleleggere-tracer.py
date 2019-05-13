@@ -75,7 +75,7 @@ def run_query(name):
         title = item[0].contents[0]
         link = item[0].get("href")
 
-        if title.lower().find("spoiler") == -1:
+        if title.lower().find("spoiler") != -1:
             continue
 
         if not queries.get(name):   # insert the new traced novel
@@ -90,7 +90,7 @@ def run_query(name):
                 msg.append(tmp)
                 date = time.strftime("%d/%m/%Y", time.localtime(time.time()))
                 queries[name][url][link] = {"title": title, "date": date}
-    if len(msg) > 0:
+    if msg:
         telegram_send.send(messages=msg, parse_mode="markdown", disable_web_page_preview=True, timeout=60)
         print("\n --- --- --- \n".join(msg).replace("**", "").replace("__", ""))
         save(dbFile)
