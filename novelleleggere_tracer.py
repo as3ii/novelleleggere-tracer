@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 
 PARSER = argparse.ArgumentParser()
 PARSER.add_argument("--name", dest="name", metavar="\"novel name\"", help="name of the novel to trace")
-PARSER.add_argument("--dele", metavar="\"novel name\"", help="name of the novel you don't want to trace anymore")
+PARSER.add_argument("--dele", dest="dele", metavar="\"novel name\"", help="name of the novel you don't want to trace anymore")
 PARSER.add_argument("-r", "--refresh", dest="refresh", action="store_true", help="refresh tracker results")
 PARSER.set_defaults(refresh=False)
 PARSER.add_argument("-l", "--list", dest="list", action="store_true", help="print a list of current traced novel")
@@ -95,7 +95,14 @@ def run_query(name):
                 date = time.strftime("%d/%m/%Y", time.localtime(time.time()))
                 QUERIES[name][url][link] = {"title": title, "date": date}
     if msg:
-        telegram_send.send(messages=msg, parse_mode="markdown", disable_web_page_preview=True, timeout=60)
+        while len(msg) != 0:
+            to_be_sent = msg[:20]
+            telegram_send.send(messages=to_be_sent, parse_mode="markdown",
+                    disable_web_page_preview=True, timeout=60)
+            del msg[:20]
+            if len(to_be_sent) == 20:
+                print("sleeping for one minute to avoid hitting telegram flood protection")
+                time.sleep(60)
         print("\n --- --- --- \n".join(msg).replace("**", "").replace("__", ""))
         save(DBFILE)
     # print("queries file saved: ", queries)
@@ -123,7 +130,7 @@ if __name__ == '__main__':
         refresh()
 
     if ARGS.dele is not None:
-        delete(ARGS.delete)
+        delete(ARGS.dele)
 
     print()
     save(DBFILE)
