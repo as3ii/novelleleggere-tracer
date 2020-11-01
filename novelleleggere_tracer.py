@@ -1,42 +1,21 @@
 #!/usr/bin/env python3
 
-import argparse
-import json
-import os.path
-import time
-import sys
-import telegram_send
-import requests
-from bs4 import BeautifulSoup
-
-PARSER = argparse.ArgumentParser()
-PARSER.add_argument("--name", dest="name", metavar="\"novel name\"", help="name of the novel to trace")
-PARSER.add_argument("--dele", dest="dele", metavar="\"novel name\"", help="name of the novel you don't want to trace anymore")
-PARSER.add_argument("-r", "--refresh", dest="refresh", action="store_true", help="refresh tracker results")
-PARSER.set_defaults(refresh=False)
-PARSER.add_argument("-l", "--list", dest="list", action="store_true", help="print a list of current traced novel")
-PARSER.set_defaults(list=False)
-
-ARGS = PARSER.parse_args()
-
-QUERIES = dict()
-DBFILE = "novel.traced"
-
+from sys import exit
+import os
 
 def load_from_file(file_name):
-    global QUERIES
-    if not os.path.isfile(file_name):
-        return
+    from json import load
+    from os.path import isfile
 
-    with open(file_name) as file:
-        QUERIES = json.load(file)
+    if not isfile(file_name):
+        return dict()
+
+    with open(file_name) as jfile:
+        return load(jfile)
 
 
-
-def print_queries():
-    global QUERIES
-    #print(queries, "\n\n")
-    for search in QUERIES.items():
+def print_queries(queries):
+    for search in queries.items():
         print("\nsearch: ", search[0])
         for query_url in search[1]:
             print("query url:", query_url)
@@ -46,27 +25,31 @@ def print_queries():
                     print(" ", result[0])
 
 
-def refresh():
-    global QUERIES
-    for search in QUERIES.items():
+def refresh(queries, dbfile, token, chatid):
+    for search in queries.items():
         for _ in search[1]:
-            run_query(search[0])
+            queries = run_query(search[0], queries, dbfile, token, chatid)
+    return queries
 
 
-def delete(to_delete):
-    global QUERIES
-    QUERIES.pop(to_delete)
+def delete(to_delete, queries):
+    queries.pop(to_delete)
+    return queries
 
 
-def run_query(name):
+def run_query(name, queries, dbfile, token, chatid):
+    import telegram
+    import requests
+    from bs4 import BeautifulSoup
+    import time
+
     url = "https://www.novelleleggere.com/category/" + name.replace(" ", "-").lower()
     print("running query - ", name, url)
-    global QUERIES
     # get page
     try:
         page = requests.get(url)
     except requests.exceptions.ConnectionError:
-        sys.exit("Connection Error")
+        exit("Connection Error")
     soup = BeautifulSoup(page.text, "html.parser")
     # extract title and url
     chapter_list = soup.find(class_="fusion-posts-container")
@@ -79,58 +62,115 @@ def run_query(name):
         title = item[0].contents[0]
         link = item[0].get("href")
 
-        if title.lower().find("spoiler") != -1:
+        if title.lower().find("spoiler") != -1 or \
+            title.lower().find("non editato") != -1:
             continue
 
-        if not QUERIES.get(name):   # insert the new traced novel
-            date = time.strftime("%d/%m/%Y", time.localtime(time.time()))
-            QUERIES[name] = {url: {link: {"title": title, "date": date}}}
+        if not queries.get(name):   # insert the new traced novel
             print("\nNew traced novel added: ", name)
+            date = time.strftime("%d/%m/%Y", time.localtime(time.time()))
             print("Adding result: ", title, " - ", date)
-        else:   # add traced novel to dictionary
-            if not QUERIES.get(name).get(url).get(link):    #found a new element
+            tmp = "New element found for **"+name+"**: __"+title+"__\n"
+            tmp += "\n"+link
+            msg.append(tmp)
+            queries[name] = {url: {link: {"title": title, "date": date}}}
+        else:
+            if not queries.get(name).get(url).get(link):    #found a new element
+                print("Adding result: ", title, " - ", date)
                 tmp = "New element found for **"+name+"**: __"+title+"__\n"
                 tmp += "\n"+link
                 msg.append(tmp)
                 date = time.strftime("%d/%m/%Y", time.localtime(time.time()))
-                QUERIES[name][url][link] = {"title": title, "date": date}
+                queries[name][url][link] = {"title": title, "date": date}
+
     if msg:
-        while len(msg) != 0:
-            to_be_sent = msg[:20]
-            telegram_send.send(messages=to_be_sent, parse_mode="markdown",
-                    disable_web_page_preview=True, timeout=60)
-            del msg[:20]
-            if len(to_be_sent) == 20:
-                print("sleeping for one minute to avoid hitting telegram flood protection")
-                time.sleep(60)
-        print("\n --- --- --- \n".join(msg).replace("**", "").replace("__", ""))
-        save(DBFILE)
-    # print("queries file saved: ", queries)
+        # initialize bot
+        bot = telegram.Bot(token,
+                request=telegram.utils.request.Request(read_timeout=60))
+
+        count = 0   # counter for antispam protection
+        while len(msg) > 0:
+            bot.send_message(chat_id=chatid, text=msg[0], parse_mode="markdown",
+                    disable_web_page_preview=True)
+            del msg[0]
+            count = count + 1
+            if count >= 10:
+                count = 0
+                print("sleeping for 30 seconds to avoid hitting", end=' ')
+                print("telegram flood protection")
+                time.sleep(30)
+
+        save(dbfile, queries)
+        return queries
 
 
-
-def save(file_name):
-    with open(file_name, 'w') as file:
-        file.write(json.dumps(QUERIES))
-
+def save(file_name, queries):
+    from json import dumps
+    with open(file_name, 'w') as filej:
+        filej.write(dumps(queries))
 
 
 if __name__ == '__main__':
+    import argparse
 
-    load_from_file(DBFILE)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-n", "--name", dest="name",
+            metavar="\"novel name\"",
+            help="name of the novel to trace")
+    parser.add_argument("-d", "--dele", dest="dele",
+            metavar="\"novel name\"",
+            help="name of the novel you don't want to trace anymore")
+    parser.add_argument("-r", "--refresh", dest="refresh",
+            action="store_true", default=False,
+            help="refresh tracker results")
+    parser.add_argument("-l", "--list", dest="list",
+            action="store_true", default=False,
+            help="print a list of current traced novel")
+    parser.add_argument("-t", "--token", dest="token",
+            metavar="123456789:ASDFG-5asdf5asdfasdsdf4_sdf54asf", default=None,
+            help="bot token")
+    parser.add_argument("-c", "--chatid", dest="chatid",
+            metavar="123456789", default=None,
+            help="chat id")
+    parser.add_argument("-b", "--db", dest="dbfile",
+            metavar="\"/path/to/dbfile.json\"", default="novelleleggere.json",
+            help="path to the file used as database")
+    args = parser.parse_args()
 
-    if ARGS.list:
+    if args.token is not None:
+        token = args.token
+    else:
+        token = os.environ.get('TOKEN')
+        if token is None:
+            raise RuntimeError("TOKEN environment variable not set")
+
+    if args.chatid is not None:
+        chatid = args.chatid
+    else:
+        chatid = os.environ.get('CHATID')
+        if chatid is None:
+            raise RuntimeError("CHATID environment variable not set")
+
+    dbfile = os.environ.get('DBFILE')
+    if dbfile is None:
+        dbfile = args.dbfile
+
+
+    queries = load_from_file(dbfile)
+
+    if args.list:
         print("printing current status...")
-        print_queries()
+        print_queries(queries)
 
-    if ARGS.name is not None:
-        run_query(ARGS.name)
+    if args.name is not None:
+        queries = run_query(args.name, queries, dbfile, token, chatid)
 
-    if ARGS.refresh:
-        refresh()
+    if args.refresh:
+        queries = refresh(queries, dbfile, token, chatid)
 
-    if ARGS.dele is not None:
-        delete(ARGS.dele)
+    if args.dele is not None:
+        queries = delete(args.dele, queries)
 
     print()
-    save(DBFILE)
+    save(dbfile, queries)
+
