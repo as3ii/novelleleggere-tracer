@@ -76,11 +76,11 @@ def run_query(name, queries, dbfile, token, chatid):
             queries[name] = {url: {link: {"title": title, "date": date}}}
         else:
             if not queries.get(name).get(url).get(link):    #found a new element
+                date = time.strftime("%d/%m/%Y", time.localtime(time.time()))
                 print("Adding result: ", title, " - ", date)
                 tmp = "New element found for **"+name+"**: __"+title+"__\n"
                 tmp += "\n"+link
                 msg.append(tmp)
-                date = time.strftime("%d/%m/%Y", time.localtime(time.time()))
                 queries[name][url][link] = {"title": title, "date": date}
 
     if msg:
@@ -101,7 +101,7 @@ def run_query(name, queries, dbfile, token, chatid):
                 time.sleep(30)
 
         save(dbfile, queries)
-        return queries
+    return queries
 
 
 def save(file_name, queries):
