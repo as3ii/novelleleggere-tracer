@@ -1,5 +1,7 @@
 #!/bin/sh
 
+cd "${0%/*}"
+
 if [ -e "${0%/*}/bin/activate" ]; then
     . "${0%/*}/bin/activate"
 fi
@@ -16,7 +18,8 @@ fi
 
 while true; do
     # run every minute if there are problems
-    while ! python3 novelleleggere_tracer.py -r; do
+    while ! timeout -k 200s 180s python3 novelleleggere_tracer.py -r; do
+        printf "Timeout, retrying in 60s"
         sleep 60
     done
     sleep 2700  # 45 minutes
